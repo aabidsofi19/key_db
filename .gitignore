@@ -166,3 +166,9 @@ cython_debug/
 
 # End of https://www.toptal.com/developers/gitignore/api/python
 n
+
+
+## Test Dbs
+
+test.db
+temp.db
