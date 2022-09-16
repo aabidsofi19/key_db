@@ -21,7 +21,7 @@ pub trait Loggable<T> {
     fn from_log(log: &[u8]) -> Result<T, String>;
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct SetCommand {
     pub key: String,
     pub value: PyObject,
@@ -97,7 +97,7 @@ impl Loggable<SetCommand> for SetCommand {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub enum LogCommand {
     Set(SetCommand),
 }
@@ -110,7 +110,6 @@ impl LogCommand {
         match log[COMMAND_INDEX] {
             1 => {
                 let set_command = SetCommand::from_log(log).unwrap();
-                println!("Set : {} {:?}", set_command.key, set_command.value);
                 Ok(LogCommand::Set(set_command))
             }
             _ => Err("Unknown Command".to_string()),

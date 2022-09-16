@@ -1,0 +1,41 @@
+# Persisting in separate thread in a Append Only log
+
+==============  Dummy Python Dict Results with out persistence  ================ 
+Insert Time :- 952.41 nano seconds
+Writes Per Second :=  1049967.0
+Read Time :- 800.47 nano seconds
+Reads Per Second :=  1249266.0
+=================================  END =========================================
+
+
+## Persist after every insert
+============================= test session starts ==============================
+
+Insert Time :- 1984.4 nano seconds
+Writes Per Second :=  503930.0
+Read Time :- 1195.19 nano seconds
+Reads Per Second :=  836687.0
+
+=================================  END =========================================
+
+
+## Persist after 10 inserts 
+============================= test session starts ==============================
+
+Insert Time :- 1597.98 nano seconds
+Writes Per Second :=  625790.0
+Read Time :- 1106.59 nano seconds
+Reads Per Second :=  903677.0
+
+==============================    END   =========================================
+
+
+## Persist after 30 inserts 
+============================= test session starts ==============================
+
+Insert Time :- 1634.49 nano seconds
+Writes Per Second :=  611811.0
+Read Time :- 1094.29 nano seconds
+Reads Per Second :=  913834.0
+
+============================== 2 passed in 4.88s ===============================

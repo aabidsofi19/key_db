@@ -2,6 +2,7 @@
 import key_db
 import pytest
 import time
+import random
 
 db = None 
 
@@ -58,7 +59,7 @@ def per_sec(time_taken_nanosecs) :
            
             
 
-def test_performance(big_db,dummy_employee) : 
+def test_performance_on_big_db(big_db,dummy_employee) : 
     
     insert_times = timeit(lambda : big_db.set("employee",dummy_employee))
     print("Insert Time :-" , insert_times , "nano seconds")
@@ -68,6 +69,15 @@ def test_performance(big_db,dummy_employee) :
     print("Read Time :-" , get_times , "nano seconds")
     print("Reads Per Second := ",per_sec(get_times))
  
+
+def test_insert_performance(dummy_employee) : 
+    big_db = key_db.load(f"test.db")
+    insert_times = timeit(lambda : big_db.set(f"employee-{random.random()}",dummy_employee),repeat=1000)
+    print("Insert Time :-" , insert_times , "nano seconds")
+    print("Writes Per Second := ",per_sec(insert_times))
+   
+
+
 
 def test_performance_python(db_python,dummy_employee) : 
     
