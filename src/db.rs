@@ -1,26 +1,38 @@
 use crate::aol::{LogCommand, Loggable, SetCommand};
 use crate::utils::int::read_be_u32;
+use log::{info, trace, warn};
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
+use signal_hook::consts::signal::*;
+use signal_hook::consts::TERM_SIGNALS;
+use signal_hook::flag;
+use signal_hook::iterator::Signals;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fs::File;
 use std::fs::OpenOptions;
-use std::hash::Hash;
 use std::io::prelude::*;
 use std::io::BufWriter;
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::channel;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver};
+use std::sync::{atomic, Arc, Mutex};
 use std::thread;
 
 const MAX_LOG_SIZE: usize = 100; // Mazimum no of logs to hold in memory ater which they are dumped
 
+pub struct BackgroundThread {
+    name: String,
+    is_running: AtomicBool,
+}
+
 #[pyclass]
 pub struct Db {
+    background_threads: Vec<Arc<BackgroundThread>>,
     data: HashMap<String, PyObject>,
     location: String,
-    log: Vec<LogCommand>,
-    logs_tx: mpsc::Sender<Vec<LogCommand>>,
+    is_open: Arc<AtomicBool>,
+    logs_tx: mpsc::Sender<LogCommand>,
 }
 
 #[pymethods]
@@ -33,26 +45,32 @@ impl Db {
     pub fn set(&mut self, key: String, value: PyObject) {
         // let v: Value = Python::with_gil(|py| depythonize(value.as_ref(py)).unwrap());
         self.data.insert(key.clone(), value.clone());
-        self.log.push(LogCommand::Set(SetCommand { key, value }));
-
-        if self.log.len() >= MAX_LOG_SIZE {
-            self.dump();
-        }
-    }
-
-    pub fn dump(&mut self) {
-        self.logs_tx.send(self.log.clone()).unwrap();
-        self.log.clear();
+        self.logs_tx
+            .send(LogCommand::Set(SetCommand { key, value }))
+            .unwrap();
     }
 
     pub fn close(&mut self) {
-        println!("Closing Database and persisting the data");
-        dump(&self.log, &self.location);
-        self.log.clear();
+        self.is_open.store(false, atomic::Ordering::Relaxed);
+        loop {
+            if self.running_thread_count() == 0 {
+                break;
+            }
+        }
+    }
+
+    fn running_thread_count(&self) -> u8 {
+        self.background_threads
+            .iter()
+            .filter(|t| t.is_running.load(atomic::Ordering::Relaxed))
+            .count() as u8
     }
 }
 
-fn dump(logs: &[LogCommand], location: &str) {
+fn dump<T>(logs: T, location: &str)
+where
+    T: IntoIterator<Item = LogCommand>,
+{
     let log_file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -61,7 +79,7 @@ fn dump(logs: &[LogCommand], location: &str) {
 
     let mut log_writer = BufWriter::new(log_file);
 
-    for command in logs.iter() {
+    for command in logs.into_iter() {
         match command {
             LogCommand::Set(v) => {
                 let _ = log_writer.write(&v.to_log()).unwrap();
@@ -108,15 +126,69 @@ fn log_file_to_data(f: File) -> Result<HashMap<String, PyObject>, String> {
 }
 
 fn spawn_persisting_thread(
-    logs_rx: Receiver<Vec<LogCommand>>,
+    logs_rx: Receiver<LogCommand>,
     location: String,
+    is_open: Arc<AtomicBool>,
+    thread: Arc<BackgroundThread>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-        // println!("Spawned Persisting Thread");
-        for logs in logs_rx {
-            dump(&logs, &location);
+        //println!("Spawning Persisting Thread for db at {}", location);
+
+        let log_file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(location)
+            .unwrap();
+
+        let mut log_writer = BufWriter::new(log_file);
+
+        loop {
+            let c = logs_rx.try_recv();
+
+            match c {
+                Ok(command) => {
+                    //println!("Saving {:?}", command);
+                    let _ = log_writer.write(&command.to_log_bytes()).unwrap();
+                }
+
+                Err(_) => {
+                    if !is_open.load(atomic::Ordering::Relaxed) {
+                        //println!("Closing Persisting Thread");
+                        thread.is_running.store(false, atomic::Ordering::Relaxed);
+                        break;
+                    }
+                }
+            }
         }
+
+        log_writer.flush().unwrap();
     })
+}
+
+fn gracefull_shutown(is_open: Arc<AtomicBool>) -> Result<(), std::io::Error> {
+    // let term_now = Arc::new(AtomicBool::new(false));
+
+    for sig in TERM_SIGNALS {
+        // When terminated by a second term signal, exit with exit code 1.
+        // This will do nothing the first time (because term_now is false).
+        flag::register_conditional_shutdown(*sig, 1, Arc::clone(&is_open))?;
+        // But this will "arm" the above for the second time, by setting it to true.
+        // The order of registering these is important, if you put this one first, it will
+        // first arm and then terminate ‒ all in the first round.
+        flag::register(*sig, Arc::clone(&is_open))?;
+    }
+    //
+    // let handler = thread::spawn(move || loop {
+    //     if term_now.load(atomic::Ordering::Relaxed) || !is_open.load(atomic::Ordering::Relaxed) {
+    //         //println!("Shutting Down");
+    //         is_open.store(false, atomic::Ordering::Relaxed);
+    //         //println!("Done Shutdown");
+    //         break;
+    //     }
+    // });
+    //
+    // Ok(handler)
+    Ok(())
 }
 
 #[pyfunction]
@@ -130,12 +202,28 @@ pub fn load(path: String) -> PyResult<Db> {
     };
 
     let (logs_tx, logs_rx) = channel();
-    spawn_persisting_thread(logs_rx, path.clone());
 
-    Ok(Db {
+    let is_open = Arc::new(AtomicBool::new(true));
+
+    let persisting_thread = Arc::new(BackgroundThread {
+        is_running: AtomicBool::new(false),
+        name: "persisting_thread".to_owned(),
+    });
+
+    let persisting_handler = spawn_persisting_thread(
+        logs_rx,
+        path.clone(),
+        Arc::clone(&is_open),
+        Arc::clone(&persisting_thread),
+    );
+    gracefull_shutown(Arc::clone(&is_open))?;
+
+    let db = Db {
         data,
         logs_tx,
-        location: path,
-        log: vec![],
-    })
+        is_open: Arc::clone(&is_open),
+        location: path.clone(),
+        background_threads: vec![persisting_thread],
+    };
+    Ok(db)
 }

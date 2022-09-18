@@ -105,7 +105,14 @@ pub enum LogCommand {
 
 impl LogCommand {
     
-
+    pub fn to_log_bytes(&self) -> Vec<u8> {
+        match self {
+                LogCommand::Set(v) => {
+                    v.to_log()  
+                }
+            }
+    }
+  
     pub fn from_log_bytes(log: &[u8]) -> Result<LogCommand, String> {
         match log[COMMAND_INDEX] {
             1 => {
