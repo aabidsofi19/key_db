@@ -1,7 +1,7 @@
-use crate::aol::{LogCommand, Loggable, SetCommand};
+use crate::aol::{LogCommand, Loggable, SetCommand, RemoveCommand};
 use crate::utils::int::read_be_u32;
 use log::{info, trace, warn};
-use pyo3::exceptions::PyTypeError;
+use pyo3::exceptions::{PyTypeError, PyKeyError};
 use pyo3::prelude::*;
 use signal_hook::consts::signal::*;
 use signal_hook::consts::TERM_SIGNALS;
@@ -50,6 +50,22 @@ impl Db {
             .unwrap();
     }
 
+    pub fn remove(&mut self , key : String ) -> PyResult<PyObject> {
+
+        let removed = self.data.remove(&key);
+
+        match removed {
+            Some(k) => {
+                self.logs_tx.send(LogCommand::Remove(RemoveCommand{
+                   key 
+                })).unwrap();
+                Ok(k) 
+            },
+
+            None => Err(PyKeyError::new_err("Key not found"))
+        }
+    }
+
     pub fn close(&mut self) {
         self.is_open.store(false, atomic::Ordering::Relaxed);
         loop {
@@ -66,29 +82,29 @@ impl Db {
             .count() as u8
     }
 }
-
-fn dump<T>(logs: T, location: &str)
-where
-    T: IntoIterator<Item = LogCommand>,
-{
-    let log_file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(location)
-        .unwrap();
-
-    let mut log_writer = BufWriter::new(log_file);
-
-    for command in logs.into_iter() {
-        match command {
-            LogCommand::Set(v) => {
-                let _ = log_writer.write(&v.to_log()).unwrap();
-            }
-        }
-    }
-
-    log_writer.flush().unwrap();
-}
+//
+// fn dump<T>(logs: T, location: &str)
+// where
+//     T: IntoIterator<Item = LogCommand>,
+// {
+//     let log_file = OpenOptions::new()
+//         .create(true)
+//         .append(true)
+//         .open(location)
+//         .unwrap();
+//
+//     let mut log_writer = BufWriter::new(log_file);
+//
+//     for command in logs.into_iter() {
+//         match command {
+//             LogCommand::Set(v) => {
+//                 let _ = log_writer.write(&v.to_log()).unwrap();
+//             }
+//         }
+//     }
+//
+//     log_writer.flush().unwrap();
+// }
 
 fn log_file_to_data(f: File) -> Result<HashMap<String, PyObject>, String> {
     let mut data: HashMap<String, PyObject> = HashMap::new();
@@ -118,7 +134,10 @@ fn log_file_to_data(f: File) -> Result<HashMap<String, PyObject>, String> {
         match log? {
             LogCommand::Set(c) => {
                 data.insert(c.key, c.value);
-            }
+            },
+            LogCommand::Remove(c) => {
+                data.remove(&c.key);
+            } 
         }
     }
 

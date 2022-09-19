@@ -35,5 +35,19 @@ def test_is_data_persisted(file_path,dummy_employee) :
     assert db.get("employee1") == dummy_employee
 
     
+def test_remove(file_path,dummy_employee) :
+
+    db = key_db.load(file_path)
+
+    db.set("employee_rem",dummy_employee)
+    db.remove("employee_rem")
+    
+    assert db.get("employee_rem") is None 
+
+    db.close()
+
+    db = key_db.load(file_path)
+    assert db.get("employee_rem") is None 
+
 
 
