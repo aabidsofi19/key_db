@@ -16,45 +16,43 @@ const TOTAL_SIZE_INDEX: Range<usize> = 0..4;
 pub trait Loggable<T> {
     // add code here
     //
-    fn action_value() -> u8 ;
+    fn action_value() -> u8;
     fn to_log(&self) -> Vec<u8>;
     fn from_log(log: &[u8]) -> Result<T, String>;
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct SetCommand {
     pub key: String,
     pub value: PyObject,
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct RemoveCommand {
     pub key: String,
 }
 
 impl Loggable<RemoveCommand> for RemoveCommand {
-    
     fn action_value() -> u8 {
-        2 
+        2
     }
 
     fn to_log(&self) -> Vec<u8> {
-
-        // RemoveCommand Log Structure 
+        // RemoveCommand Log Structure
         // [Totol_size u32][command_value u8][key_size u8][key value upto u8 bytes]
-        
-        let mut log : Vec<u8> = vec![];
+
+        let mut log: Vec<u8> = vec![];
 
         let key = self.key.as_bytes();
         let key_size = key.len() as u8;
-        
-        let total_size =  COMMAND_SIZE + KEY_SIZE_BYTES + ( key_size  as usize) ;
+
+        let total_size = COMMAND_SIZE + KEY_SIZE_BYTES + (key_size as usize);
 
         log.extend_from_slice(&total_size.to_be_bytes());
-        log.push(RemoveCommand::action_value()) ;
+        log.push(RemoveCommand::action_value());
         log.extend_from_slice(&key_size.to_be_bytes());
         log.extend_from_slice(key);
-        
+
         log
     }
 
@@ -62,8 +60,8 @@ impl Loggable<RemoveCommand> for RemoveCommand {
         let total_size = read_be_u32(&mut &log[TOTAL_SIZE_INDEX]) as usize;
         let key_size_index = 5;
         let key_starts_at = key_size_index + 1;
-        let key_ends_at = key_starts_at + (log[key_size_index] as usize); 
-       
+        let key_ends_at = key_starts_at + (log[key_size_index] as usize);
+
         if log.len() - 4 != total_size {
             return Err("Corupt Log".to_string());
         };
@@ -73,16 +71,12 @@ impl Loggable<RemoveCommand> for RemoveCommand {
         };
 
         let key = String::from_utf8(log[key_starts_at..key_ends_at].into()).unwrap();
-        
-        Ok(RemoveCommand{
-            key 
-        }) 
+
+        Ok(RemoveCommand { key })
     }
-            
 }
 
 impl Loggable<SetCommand> for SetCommand {
-
     // add code here
     fn action_value() -> u8 {
         1
@@ -149,28 +143,21 @@ impl Loggable<SetCommand> for SetCommand {
     }
 }
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum LogCommand {
     Set(SetCommand),
-    Remove(RemoveCommand)
+    Remove(RemoveCommand),
 }
 
-
 impl LogCommand {
-    
     pub fn to_log_bytes(&self) -> Vec<u8> {
         match self {
-                LogCommand::Set(v) => {
-                    v.to_log()  
-                },
+            LogCommand::Set(v) => v.to_log(),
 
-                Self::Remove(v) => {
-                   v.to_log()
-                }
-
-            }
+            Self::Remove(v) => v.to_log(),
+        }
     }
-  
+
     pub fn from_log_bytes(log: &[u8]) -> Result<LogCommand, String> {
         match log[COMMAND_INDEX] {
             1 => {

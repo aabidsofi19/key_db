@@ -1,12 +1,12 @@
 #![feature(iterator_try_collect)]
 
 mod aol;
-mod utils;
 mod db;
+mod utils;
 
+use crate::db::{load, Db};
 use pyo3::prelude::*;
 use pyo3::Python;
-use crate::db::{load,Db};
 
 //
 // #[pyclass]
@@ -77,7 +77,7 @@ use crate::db::{load,Db};
 //                     }
 //                     Ordering::Greater => {
 //                         if log.len() == 4 + (size as usize) {
-//                             
+//
 //                             logs.push(LogCommand::from_log_bytes(&log));
 //                             log.clear();
 //                         }
@@ -110,7 +110,6 @@ use crate::db::{load,Db};
 // }
 //
 
-
 /// A Python module implemented in Rust.c
 #[pymodule]
 fn key_db(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -118,4 +117,3 @@ fn key_db(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Db>()?;
     Ok(())
 }
-

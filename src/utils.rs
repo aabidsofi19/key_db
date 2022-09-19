@@ -8,12 +8,11 @@ pub mod int {
 }
 
 pub mod python {
-    use serde_json::Value ;
     use pyo3::prelude::*;
-    use pyo3::Python ;
+    use pyo3::Python;
     use serde::Serialize;
+    use serde_json::Value;
     use std::collections::HashMap;
-    
 
     pub fn value_to_object(val: &Value, py: Python<'_>) -> PyObject {
         match val {

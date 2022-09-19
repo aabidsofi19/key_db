@@ -1,7 +1,7 @@
-use crate::aol::{LogCommand, Loggable, SetCommand, RemoveCommand};
+use crate::aol::{LogCommand, Loggable, RemoveCommand, SetCommand};
 use crate::utils::int::read_be_u32;
 use log::{info, trace, warn};
-use pyo3::exceptions::{PyTypeError, PyKeyError};
+use pyo3::exceptions::{PyKeyError, PyTypeError};
 use pyo3::prelude::*;
 use signal_hook::consts::signal::*;
 use signal_hook::consts::TERM_SIGNALS;
@@ -50,19 +50,18 @@ impl Db {
             .unwrap();
     }
 
-    pub fn remove(&mut self , key : String ) -> PyResult<PyObject> {
-
+    pub fn remove(&mut self, key: String) -> PyResult<PyObject> {
         let removed = self.data.remove(&key);
 
         match removed {
             Some(k) => {
-                self.logs_tx.send(LogCommand::Remove(RemoveCommand{
-                   key 
-                })).unwrap();
-                Ok(k) 
-            },
+                self.logs_tx
+                    .send(LogCommand::Remove(RemoveCommand { key }))
+                    .unwrap();
+                Ok(k)
+            }
 
-            None => Err(PyKeyError::new_err("Key not found"))
+            None => Err(PyKeyError::new_err("Key not found")),
         }
     }
 
@@ -134,10 +133,10 @@ fn log_file_to_data(f: File) -> Result<HashMap<String, PyObject>, String> {
         match log? {
             LogCommand::Set(c) => {
                 data.insert(c.key, c.value);
-            },
+            }
             LogCommand::Remove(c) => {
                 data.remove(&c.key);
-            } 
+            }
         }
     }
 
