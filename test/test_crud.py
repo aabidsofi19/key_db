@@ -1,52 +1,29 @@
 import key_db
-
+import pytest 
 
 def test_load_empty_db(file_path) :
     
 
     db = key_db.load(file_path)
-
     assert db 
-    
     db.close()
 
 
-def test_get_set(file_path,dummy_employee) :
+def test_get_set(db,dummy_employee) :
+    
     employee_dict = dummy_employee
-    db = key_db.load(file_path)
-
-
     db.set("employee1", employee_dict )
 
     assert db.get("employee1") == employee_dict
-    
-    db.close()
-
-
-def test_is_data_persisted(file_path,dummy_employee) :
-
-    db = key_db.load(file_path)
-
-    db.set("employee1" , dummy_employee)
-    db.close()
-
-    db = key_db.load(file_path)
-
-    assert db.get("employee1") == dummy_employee
+    assert not db.get("not_in_db" )
 
     
-def test_remove(file_path,dummy_employee) :
+def test_remove(db,dummy_employee) :
 
-    db = key_db.load(file_path)
 
     db.set("employee_rem",dummy_employee)
     db.remove("employee_rem")
     
-    assert db.get("employee_rem") is None 
-
-    db.close()
-
-    db = key_db.load(file_path)
     assert db.get("employee_rem") is None 
 
 

@@ -1,5 +1,5 @@
 import pytest  
-import json
+import key_db
 from pathlib import Path
 
 
@@ -15,10 +15,11 @@ def file_path():
 
 
 @pytest.fixture
-def test_db() :
+def db(file_path) :
+    db = key_db.load(file_path)
+    yield db 
+    db.close 
 
-    with open("test.db") as f :
-        yield f
 
 @pytest.fixture
 def dummy_employee() :
