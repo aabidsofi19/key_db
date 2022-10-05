@@ -4,6 +4,8 @@ use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::exceptions::{PyKeyError, PyTypeError};
 use pyo3::prelude::*;
+use pythonize::{depythonize, pythonize};
+use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -15,8 +17,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::channel;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{atomic, Arc};
-use std::thread;
-
+use std::thread::{self, JoinHandle};
 
 create_exception!(key_db, ConnectionClosedException, PyException);
 
@@ -35,12 +36,12 @@ impl From<ConnectionClosed> for PyErr {
     }
 }
 
-
 #[pyclass]
 pub struct Db {
     data: HashMap<String, PyObject>,
     is_open: Arc<AtomicBool>,
     logs_tx: Option<mpsc::Sender<LogCommand>>,
+    persist_handler: Option<JoinHandle<()>>
 }
 
 #[pymethods]
@@ -62,6 +63,9 @@ impl Db {
     pub fn set(&mut self, key: String, value: PyObject) -> Result<bool, ConnectionClosed> {
         self.connection_is_open()?;
         self.data.insert(key.clone(), value.clone());
+
+        let value: Value = Python::with_gil(|py| depythonize(value.as_ref(py)).unwrap());
+
         self.logs_tx
             .as_ref()
             .unwrap()
@@ -94,14 +98,14 @@ impl Db {
         self.is_open.store(false, atomic::Ordering::Relaxed);
 
         if let Some(tx) = self.logs_tx.take() {
-            println!("Droping tx") ;
+            println!("Droping tx");
             drop(tx);
         };
         
+        self.persist_handler.take().map(JoinHandle::join).unwrap().unwrap() ;
         println!("closed");
         Ok(())
     }
- 
 }
 
 fn log_file_to_data(f: File) -> Result<HashMap<String, PyObject>, String> {
@@ -126,13 +130,18 @@ fn log_file_to_data(f: File) -> Result<HashMap<String, PyObject>, String> {
 
             _ => {}
         }
+
+        println!("size : {size}") ;
+        println!("log : {log:?}");
     }
 
     for log in logs {
+        println!("log : {log:?}");
         match log? {
             LogCommand::Set(c) => {
                 println!("setting key {}", c.key.clone());
-                data.insert(c.key, c.value);
+                let pythonized_value = Python::with_gil(|py| pythonize(py, &c.value).unwrap());
+                data.insert(c.key, pythonized_value);
             }
             LogCommand::Remove(c) => {
                 println!("removing key {}", c.key.clone());
@@ -149,7 +158,10 @@ fn spawn_persisting_thread(
     location: String,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-       dump(logs_rx,&location);
+
+
+        dump(logs_rx, &location);
+        println!("Finished Persisting Thread");
     })
 }
 
@@ -165,15 +177,16 @@ where
 
     let mut log_writer = BufWriter::new(log_file);
 
-    for command in logs.into_iter() {   
-        println!("Dumping {:?}",command);
+    for command in logs.into_iter() {
+        println!("Dumping {:?} {:?}",command , &command.to_log_bytes() );
         let _ = log_writer.write(&command.to_log_bytes()).unwrap();
         println!("waiting for next")
     }
 
+    println!("flushed");
     log_writer.flush().unwrap();
-}
 
+}
 
 #[pyfunction]
 pub fn load(path: String) -> PyResult<Db> {
@@ -189,13 +202,13 @@ pub fn load(path: String) -> PyResult<Db> {
 
     let is_open = Arc::new(AtomicBool::new(true));
 
-    spawn_persisting_thread(logs_rx, path);
-    
+    let persist_handler = Some(spawn_persisting_thread(logs_rx, path));
 
     let db = Db {
         data,
         is_open: Arc::clone(&is_open),
         logs_tx: Some(logs_tx),
+        persist_handler
     };
     Ok(db)
 }

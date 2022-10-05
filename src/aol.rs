@@ -1,8 +1,5 @@
 use crate::utils::int::read_be_u32;
 use core::ops::Range;
-use pyo3::prelude::*;
-use pyo3::Python;
-use pythonize::{depythonize, pythonize};
 use serde_json::Value;
 
 const KEY_SIZE_BYTES: usize = 1;
@@ -24,7 +21,7 @@ pub trait Loggable<T> {
 #[derive(Debug, Clone)]
 pub struct SetCommand {
     pub key: String,
-    pub value: PyObject,
+    pub value: Value,
 }
 
 #[derive(Debug, Clone)]
@@ -46,9 +43,10 @@ impl Loggable<RemoveCommand> for RemoveCommand {
         let key = self.key.as_bytes();
         let key_size = key.len() as u8;
 
-        let total_size = COMMAND_SIZE + KEY_SIZE_BYTES + (key_size as usize);
+        let total_size = (COMMAND_SIZE + KEY_SIZE_BYTES + (key_size as usize)) as u32;
 
         log.extend_from_slice(&total_size.to_be_bytes());
+
         log.push(RemoveCommand::action_value());
         log.extend_from_slice(&key_size.to_be_bytes());
         log.extend_from_slice(key);
@@ -88,8 +86,8 @@ impl Loggable<SetCommand> for SetCommand {
         //  u8][k][e][y][value][size][i][32][v][a][l][u][e]
 
         let mut log: Vec<u8> = vec![];
-        let v: Value = Python::with_gil(|py| depythonize(self.value.as_ref(py)).unwrap());
-        let value = serde_json::to_string(&v).unwrap().into_bytes();
+        // let v: Value = Python::with_gil(|py| depythonize(self.value.as_ref(py)).unwrap());
+        let value = serde_json::to_string(&self.value).unwrap().into_bytes();
         let value_length = value.len() as u32;
         let key = self.key.as_bytes();
 
@@ -133,11 +131,11 @@ impl Loggable<SetCommand> for SetCommand {
         let value = String::from_utf8(log[value_starts_at..value_ends_at].into()).unwrap();
 
         let deserialized_value: Value = serde_json::from_str(&value).unwrap();
-        let pythonized_value = Python::with_gil(|py| pythonize(py, &deserialized_value).unwrap());
+        // let pythonized_value = Python::with_gil(|py| pythonize(py, &deserialized_value).unwrap());
 
         Ok(SetCommand {
             key,
-            value: pythonized_value,
+            value:deserialized_value,
         })
     }
 }
@@ -162,6 +160,11 @@ impl LogCommand {
             1 => {
                 let set_command = SetCommand::from_log(log).unwrap();
                 Ok(LogCommand::Set(set_command))
+            },
+
+            2 => {
+                let remove_command = RemoveCommand::from_log(log).unwrap() ;
+                Ok(LogCommand::Remove(remove_command)) 
             }
             _ => Err("Unknown Command".to_string()),
         }

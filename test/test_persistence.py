@@ -12,6 +12,7 @@ def test_set(file_path)  :
     db = key_db.load(file_path)
     db.set("test","test") 
     db.close()
+    
 
     db = key_db.load(file_path)
     v = db.get("test")
@@ -23,6 +24,7 @@ def test_remove(file_path) :
         db.set("test","test") 
         db.remove("test") 
     
+
     with get_db(file_path) as db :
         v = db.get("test")
         assert v is None
