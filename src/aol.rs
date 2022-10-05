@@ -88,7 +88,6 @@ impl Loggable<SetCommand> for SetCommand {
         //  u8][k][e][y][value][size][i][32][v][a][l][u][e]
 
         let mut log: Vec<u8> = vec![];
-
         let v: Value = Python::with_gil(|py| depythonize(self.value.as_ref(py)).unwrap());
         let value = serde_json::to_string(&v).unwrap().into_bytes();
         let value_length = value.len() as u32;
