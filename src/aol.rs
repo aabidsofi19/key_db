@@ -135,7 +135,7 @@ impl Loggable<SetCommand> for SetCommand {
 
         Ok(SetCommand {
             key,
-            value:deserialized_value,
+            value: deserialized_value,
         })
     }
 }
@@ -160,13 +160,70 @@ impl LogCommand {
             1 => {
                 let set_command = SetCommand::from_log(log).unwrap();
                 Ok(LogCommand::Set(set_command))
-            },
+            }
 
             2 => {
-                let remove_command = RemoveCommand::from_log(log).unwrap() ;
-                Ok(LogCommand::Remove(remove_command)) 
+                let remove_command = RemoveCommand::from_log(log).unwrap();
+                Ok(LogCommand::Remove(remove_command))
             }
             _ => Err("Unknown Command".to_string()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use std::vec;
+
+    use super::*;
+    use serde_json::json;
+
+    fn set_command_bytes() -> Vec<u8> {
+        vec![
+            0, 0, 0, 16, 1, 4, 116, 101, 115, 116, 0, 0, 0, 6, 34, 116, 101, 115, 116, 34,
+        ]
+    }
+
+    fn set_command() -> LogCommand {
+        LogCommand::Set(SetCommand {
+            key: "test".to_string(),
+            value: json!("test".to_string()),
+        })
+    }
+    
+    fn remove_command() -> LogCommand {
+        LogCommand::Remove(RemoveCommand{
+            key:"test".to_string()
+        })
+    }
+
+    fn remove_command_bytes() -> Vec<u8> {
+        vec![0, 0, 0, 6, 2, 4, 116, 101, 115, 116]
+    }
+
+    #[test]
+    fn set_command_to_bytes() {
+        let bytes = set_command().to_log_bytes();
+        assert_eq!(bytes.len(), set_command_bytes().len());
+        assert_eq!(bytes, set_command_bytes());
+    }
+
+    #[test]
+    fn set_command_from_bytes() {
+        let command_res = LogCommand::from_log_bytes(&set_command_bytes());
+
+        assert!(command_res.is_ok());
+        let command = command_res.unwrap();
+        assert_eq!(command.to_log_bytes(), set_command_bytes());
+    }
+
+
+    #[test]
+    fn remove_command_to_bytes() {
+        let bytes = remove_command().to_log_bytes() ;
+        
+        // assert_eq!(bytes.len(),remove_command_bytes().len()) ;
+        assert_eq!(bytes,remove_command_bytes());
     }
 }
