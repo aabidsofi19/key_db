@@ -1,9 +1,7 @@
 import key_db
-import pytest 
 
 def test_load_empty_db(file_path) :
     
-
     db = key_db.load(file_path)
     assert db 
     db.close()
@@ -11,6 +9,7 @@ def test_load_empty_db(file_path) :
 
 def test_get_set(db,dummy_employee) :
     
+ 
     employee_dict = dummy_employee
     db.set("employee1", employee_dict )
 
