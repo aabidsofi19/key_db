@@ -149,7 +149,9 @@ fn log_commands_to_data(commands: Vec<LogCommand>) -> Result<HashMap<String, PyO
     let mut data: HashMap<String, PyObject> = HashMap::new();
 
     for command in commands {
+        println!("loading command {command:?}"); 
         match command {
+
             LogCommand::Set(c) => {
                 let pythonized_value = Python::with_gil(|py| {
                     pythonize(py, &c.value).unwrap_or_else(|_| panic!("Corrup log cannot pythonize {c:?}")) 
