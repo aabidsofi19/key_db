@@ -11,8 +11,8 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::fs::File;
 use std::fs::OpenOptions;
-use std::io::prelude::*;
 use std::io::BufWriter;
+use std::io::{prelude::*, Error};
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::channel;
 use std::sync::mpsc::{self, Receiver};
@@ -41,7 +41,7 @@ pub struct Db {
     data: HashMap<String, PyObject>,
     is_open: Arc<AtomicBool>,
     logs_tx: Option<mpsc::Sender<LogCommand>>,
-    persist_handler: Option<JoinHandle<()>>
+    persist_handler: Option<JoinHandle<()>>,
 }
 
 #[pymethods]
@@ -101,21 +101,31 @@ impl Db {
             println!("Droping tx");
             drop(tx);
         };
-        
-        self.persist_handler.take().map(JoinHandle::join).unwrap().unwrap() ;
+
+        self.persist_handler
+            .take()
+            .map(JoinHandle::join)
+            .unwrap()
+            .unwrap();
         println!("closed");
         Ok(())
     }
 }
 
 fn log_file_to_data(f: File) -> Result<HashMap<String, PyObject>, String> {
-    let mut data: HashMap<String, PyObject> = HashMap::new();
+   let commands = log_bytes_to_commands(f.bytes())?;
+   log_commands_to_data(commands)
+}
 
+fn log_bytes_to_commands<T>(bytes: T) -> Result<Vec<LogCommand>, String>
+where
+    T: IntoIterator<Item = Result<u8, Error>>,
+{
     let mut logs = vec![];
     let mut log = vec![];
     let mut size = 0;
 
-    for byte in f.bytes() {
+    for byte in bytes {
         log.push(byte.map_err(|e| e.to_string())?);
         match log.len().cmp(&4) {
             Ordering::Equal => {
@@ -123,28 +133,30 @@ fn log_file_to_data(f: File) -> Result<HashMap<String, PyObject>, String> {
             }
             Ordering::Greater => {
                 if log.len() == 4 + (size as usize) {
-                    logs.push(LogCommand::from_log_bytes(&log));
+                    logs.push(LogCommand::from_log_bytes(&log)?);
                     log.clear();
                 }
             }
 
             _ => {}
         }
-
-        println!("size : {size}") ;
-        println!("log : {log:?}");
     }
 
-    for log in logs {
-        println!("log : {log:?}");
-        match log? {
+    Ok(logs)
+}
+
+fn log_commands_to_data(commands: Vec<LogCommand>) -> Result<HashMap<String, PyObject>, String> {
+    let mut data: HashMap<String, PyObject> = HashMap::new();
+
+    for command in commands {
+        match command {
             LogCommand::Set(c) => {
-                println!("setting key {}", c.key.clone());
-                let pythonized_value = Python::with_gil(|py| pythonize(py, &c.value).unwrap());
+                let pythonized_value = Python::with_gil(|py| {
+                    pythonize(py, &c.value).unwrap_or_else(|_| panic!("Corrup log cannot pythonize {c:?}")) 
+                });
                 data.insert(c.key, pythonized_value);
             }
             LogCommand::Remove(c) => {
-                println!("removing key {}", c.key.clone());
                 data.remove(&c.key).unwrap();
             }
         }
@@ -158,8 +170,6 @@ fn spawn_persisting_thread(
     location: String,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-
-
         dump(logs_rx, &location);
         println!("Finished Persisting Thread");
     })
@@ -178,14 +188,11 @@ where
     let mut log_writer = BufWriter::new(log_file);
 
     for command in logs.into_iter() {
-        println!("Dumping {:?} {:?}",command , &command.to_log_bytes() );
         let _ = log_writer.write(&command.to_log_bytes()).unwrap();
-        println!("waiting for next")
     }
 
     println!("flushed");
     log_writer.flush().unwrap();
-
 }
 
 #[pyfunction]
@@ -208,7 +215,7 @@ pub fn load(path: String) -> PyResult<Db> {
         data,
         is_open: Arc::clone(&is_open),
         logs_tx: Some(logs_tx),
-        persist_handler
+        persist_handler,
     };
     Ok(db)
 }
