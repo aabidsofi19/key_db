@@ -171,6 +171,10 @@ n
 ## Test Dbs
 
 test_*.db
+test.db
+temp.db
+
+
 # Created by https://www.toptal.com/developers/gitignore/api/virtualenv
 # Edit at https://www.toptal.com/developers/gitignore?templates=virtualenv
 
