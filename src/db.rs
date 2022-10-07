@@ -20,6 +20,12 @@ use std::sync::{atomic, Arc};
 use std::thread::{self, JoinHandle};
 
 create_exception!(key_db, ConnectionClosedException, PyException);
+create_exception!(key_db, InvalidDatatypeException,  PyException);
+
+
+
+
+
 
 #[derive(Debug, Clone)]
 pub struct ConnectionClosed;
@@ -35,6 +41,9 @@ impl From<ConnectionClosed> for PyErr {
         ConnectionClosedException::new_err(e.to_string())
     }
 }
+
+
+
 
 #[pyclass]
 pub struct Db {
@@ -60,11 +69,14 @@ impl Db {
         Ok(())
     }
 
-    pub fn set(&mut self, key: String, value: PyObject) -> Result<bool, ConnectionClosed> {
+    pub fn set(&mut self, key: String, value: PyObject) -> PyResult<bool> {
         self.connection_is_open()?;
         self.data.insert(key.clone(), value.clone());
 
-        let value: Value = Python::with_gil(|py| depythonize(value.as_ref(py)).unwrap());
+        let value: Value = Python::with_gil(|py| {
+            depythonize(value.as_ref(py))
+                .map_err(|e| InvalidDatatypeException::new_err(e.to_string()))  
+        })?;
 
         self.logs_tx
             .as_ref()
@@ -113,8 +125,8 @@ impl Db {
 }
 
 fn log_file_to_data(f: File) -> Result<HashMap<String, PyObject>, String> {
-   let commands = log_bytes_to_commands(f.bytes())?;
-   log_commands_to_data(commands)
+    let commands = log_bytes_to_commands(f.bytes())?;
+    log_commands_to_data(commands)
 }
 
 fn log_bytes_to_commands<T>(bytes: T) -> Result<Vec<LogCommand>, String>
@@ -149,12 +161,12 @@ fn log_commands_to_data(commands: Vec<LogCommand>) -> Result<HashMap<String, PyO
     let mut data: HashMap<String, PyObject> = HashMap::new();
 
     for command in commands {
-        println!("loading command {command:?}"); 
+        println!("loading command {command:?}");
         match command {
-
             LogCommand::Set(c) => {
                 let pythonized_value = Python::with_gil(|py| {
-                    pythonize(py, &c.value).unwrap_or_else(|_| panic!("Corrup log cannot pythonize {c:?}")) 
+                    pythonize(py, &c.value)
+                        .unwrap_or_else(|_| panic!("Corrup log cannot pythonize {c:?}"))
                 });
                 data.insert(c.key, pythonized_value);
             }
