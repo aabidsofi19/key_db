@@ -20,30 +20,51 @@ use std::sync::{atomic, Arc};
 use std::thread::{self, JoinHandle};
 
 create_exception!(key_db, ConnectionClosedException, PyException);
-create_exception!(key_db, InvalidDatatypeException,  PyException);
+create_exception!(key_db, InvalidDatatypeException, PyException);
+create_exception!(key_db, CorruptLogException, PyException);
 
+#[derive(Debug)]
+pub enum SetError {
+    ConnectionClosed,
+    InvalidDataType(String),
+}
 
+impl Display for SetError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SetError::ConnectionClosed => write!(f, "{ConnectionClosedError}"),
+            SetError::InvalidDataType(message) => write!(f, "{message}"),
+        }
+    }
+}
 
+impl From<SetError> for PyErr {
+    fn from(e: SetError) -> Self {
+        match e {
+            SetError::ConnectionClosed => PyErr::from(ConnectionClosedError),
+            SetError::InvalidDataType(msg) => InvalidDatatypeException::new_err(msg),
+        }
+    }
+}
 
-
+impl std::error::Error for SetError {}
 
 #[derive(Debug, Clone)]
-pub struct ConnectionClosed;
+pub struct ConnectionClosedError;
 
-impl Display for ConnectionClosed {
+impl Display for ConnectionClosedError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Cant Perform Action on closed database")
     }
 }
 
-impl From<ConnectionClosed> for PyErr {
-    fn from(e: ConnectionClosed) -> Self {
+impl From<ConnectionClosedError> for PyErr {
+    fn from(e: ConnectionClosedError) -> Self {
         ConnectionClosedException::new_err(e.to_string())
     }
 }
 
-
-
+impl std::error::Error for ConnectionClosedError {}
 
 #[pyclass]
 pub struct Db {
@@ -62,26 +83,30 @@ impl Db {
     }
 
     /// checks if db is open else returns a error
-    fn connection_is_open(&self) -> Result<(), ConnectionClosed> {
+    fn connection_is_open(&self) -> Result<(), ConnectionClosedError> {
         if !self.is_open.load(atomic::Ordering::Relaxed) {
-            return Err(ConnectionClosed);
+            return Err(ConnectionClosedError);
         };
         Ok(())
     }
 
-    pub fn set(&mut self, key: String, value: PyObject) -> PyResult<bool> {
-        self.connection_is_open()?;
-        self.data.insert(key.clone(), value.clone());
+    pub fn set(&mut self, key: String, value: PyObject) -> Result<bool, SetError> {
+        self.connection_is_open()
+            .map_err(|_| SetError::ConnectionClosed)?;
 
-        let value: Value = Python::with_gil(|py| {
-            depythonize(value.as_ref(py))
-                .map_err(|e| InvalidDatatypeException::new_err(e.to_string()))  
+        let value_deserialized: Value = Python::with_gil(|py| {
+            depythonize(value.as_ref(py)).map_err(|e| SetError::InvalidDataType(e.to_string()))
         })?;
+
+        self.data.insert(key.clone(), value);
 
         self.logs_tx
             .as_ref()
             .unwrap()
-            .send(LogCommand::Set(SetCommand { key, value }))
+            .send(LogCommand::Set(SetCommand {
+                key,
+                value: value_deserialized,
+            }))
             .map(|_| true)
             .or(Ok(false))
     }
@@ -95,9 +120,8 @@ impl Db {
             Some(k) => {
                 self.logs_tx
                     .as_ref()
-                    .expect("Db Closed")
-                    .send(LogCommand::Remove(RemoveCommand { key }))
-                    .unwrap();
+                    .ok_or(ConnectionClosedError)
+                    .map(|tx| tx.send(LogCommand::Remove(RemoveCommand { key })).unwrap())?;
                 Ok(k)
             }
 
@@ -124,8 +148,8 @@ impl Db {
     }
 }
 
-fn log_file_to_data(f: File) -> Result<HashMap<String, PyObject>, String> {
-    let commands = log_bytes_to_commands(f.bytes())?;
+fn log_file_to_data(f: File) -> PyResult<HashMap<String, PyObject>> {
+    let commands = log_bytes_to_commands(f.bytes()).map_err(PyException::new_err)?;
     log_commands_to_data(commands)
 }
 
@@ -157,7 +181,7 @@ where
     Ok(logs)
 }
 
-fn log_commands_to_data(commands: Vec<LogCommand>) -> Result<HashMap<String, PyObject>, String> {
+fn log_commands_to_data(commands: Vec<LogCommand>) -> PyResult<HashMap<String, PyObject>> {
     let mut data: HashMap<String, PyObject> = HashMap::new();
 
     for command in commands {
@@ -165,9 +189,8 @@ fn log_commands_to_data(commands: Vec<LogCommand>) -> Result<HashMap<String, PyO
         match command {
             LogCommand::Set(c) => {
                 let pythonized_value = Python::with_gil(|py| {
-                    pythonize(py, &c.value)
-                        .unwrap_or_else(|_| panic!("Corrup log cannot pythonize {c:?}"))
-                });
+                    pythonize(py, &c.value).map_err(|_| CorruptLogException::new_err(format!("Cant Pythonize {c:?}")))
+                })?;
                 data.insert(c.key, pythonized_value);
             }
             LogCommand::Remove(c) => {
