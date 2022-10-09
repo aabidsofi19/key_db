@@ -1,5 +1,5 @@
 import pytest  
-import key_db
+import layer_db
 from pathlib import Path
 from contextlib import contextmanager
 
@@ -19,14 +19,14 @@ def file_path():
 
 @pytest.fixture
 def db(file_path) :
-    db = key_db.load(file_path)
+    db = layer_db.load(file_path)
     yield db 
     db.close()
 
 
 @contextmanager
 def get_db(file_path) :
-    db = key_db.load(file_path) 
+    db = layer_db.load(file_path) 
     yield db
     db.close()
 
