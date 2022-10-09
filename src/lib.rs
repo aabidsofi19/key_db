@@ -10,7 +10,7 @@ use pyo3::Python;
 
 /// A Python module implemented in Rust.c
 #[pymodule]
-fn key_db(_py: Python, m: &PyModule) -> PyResult<()> {
+fn layer_db(_py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
     m.add_function(wrap_pyfunction!(load, m)?)?;
     m.add_class::<Db>()?;

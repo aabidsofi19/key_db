@@ -1,6 +1,6 @@
 # import timeit
 from contextlib import contextmanager
-import key_db
+import layer_db
 import pytest
 import time
 import pickledb
@@ -10,7 +10,7 @@ from pathlib import Path
 @pytest.fixture
 def big_db() :
 
-    db =key_db.load("test_big.db")
+    db =layer_db.load("test_big.db")
 
     if  not Path("test_big.db").exists() :
         print("intializing big key db")
@@ -56,7 +56,7 @@ def db_python(dummy_employee) :
 
            
 # @pytest.mark.skip(reason="Takes long time")
-def test_performance_on_big_key_db(big_db,dummy_employee,benchmark) : 
+def test_performance_on_big_layer_db(big_db,dummy_employee,benchmark) : 
 
     benchmark(big_db.set , "employee" , dummy_employee )
 
@@ -66,7 +66,7 @@ def test_performance_on_big_pickle_db(big_pickle_db,dummy_employee,benchmark) :
 
 
 def test_empty_db(file_path,dummy_employee,benchmark) :
-    db = key_db.load(file_path)
+    db = layer_db.load(file_path)
     benchmark(db.set,"hello",dummy_employee)
     db.close()
 

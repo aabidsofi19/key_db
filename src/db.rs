@@ -19,9 +19,9 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::{atomic, Arc};
 use std::thread::{self, JoinHandle};
 
-create_exception!(key_db, ConnectionClosedException, PyException);
-create_exception!(key_db, InvalidDatatypeException, PyException);
-create_exception!(key_db, CorruptLogException, PyException);
+create_exception!(layer_db, ConnectionClosedException, PyException);
+create_exception!(layer_db, InvalidDatatypeException, PyException);
+create_exception!(layer_db, CorruptLogException, PyException);
 
 #[derive(Debug)]
 pub enum SetError {

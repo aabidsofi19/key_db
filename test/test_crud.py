@@ -1,8 +1,8 @@
-import key_db
+import layer_db
 
 def test_load_empty_db(file_path) :
     
-    db = key_db.load(file_path)
+    db = layer_db.load(file_path)
     assert db 
     db.close()
 
