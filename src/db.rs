@@ -1,4 +1,4 @@
-use crate::aol::{LogCommand, RemoveCommand, SetCommand};
+use crate::aol::commands::{LogCommand, RemoveCommand, SetCommand};
 use crate::utils::int::read_be_u32;
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
@@ -18,6 +18,7 @@ use std::sync::mpsc::channel;
 use std::sync::mpsc::{self, Receiver};
 use std::sync::{atomic, Arc};
 use std::thread::{self, JoinHandle};
+
 
 create_exception!(layer_db, ConnectionClosedException, PyException);
 create_exception!(layer_db, InvalidDatatypeException, PyException);
