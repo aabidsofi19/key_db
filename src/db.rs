@@ -1,6 +1,5 @@
 use crate::aol::commands::{LogCommand, RemoveCommand, SetCommand};
 use crate::utils::int::read_be_u32;
-use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::exceptions::{PyKeyError, PyTypeError};
 use pyo3::prelude::*;
@@ -8,7 +7,6 @@ use pythonize::{depythonize, pythonize};
 use serde_json::Value;
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::BufWriter;
@@ -19,53 +17,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::{atomic, Arc};
 use std::thread::{self, JoinHandle};
 
-
-create_exception!(layer_db, ConnectionClosedException, PyException);
-create_exception!(layer_db, InvalidDatatypeException, PyException);
-create_exception!(layer_db, CorruptLogException, PyException);
-
-#[derive(Debug)]
-pub enum SetError {
-    ConnectionClosed,
-    InvalidDataType(String),
-}
-
-impl Display for SetError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SetError::ConnectionClosed => write!(f, "{ConnectionClosedError}"),
-            SetError::InvalidDataType(message) => write!(f, "{message}"),
-        }
-    }
-}
-
-impl From<SetError> for PyErr {
-    fn from(e: SetError) -> Self {
-        match e {
-            SetError::ConnectionClosed => PyErr::from(ConnectionClosedError),
-            SetError::InvalidDataType(msg) => InvalidDatatypeException::new_err(msg),
-        }
-    }
-}
-
-impl std::error::Error for SetError {}
-
-#[derive(Debug, Clone)]
-pub struct ConnectionClosedError;
-
-impl Display for ConnectionClosedError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Cant Perform Action on closed database")
-    }
-}
-
-impl From<ConnectionClosedError> for PyErr {
-    fn from(e: ConnectionClosedError) -> Self {
-        ConnectionClosedException::new_err(e.to_string())
-    }
-}
-
-impl std::error::Error for ConnectionClosedError {}
+use crate::errors::{ConnectionClosedError,SetError,CorruptLogException} ;
 
 #[pyclass]
 pub struct Db {
