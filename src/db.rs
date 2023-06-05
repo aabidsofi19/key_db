@@ -30,13 +30,13 @@ pub struct Db {
 #[pymethods]
 impl Db {
     pub fn get(&self, key: String) -> PyResult<Option<&PyObject>> {
-        self.connection_is_open()?;
+        self.check_connection()?;
         let value = self.data.get(&key);
         Ok(value)
     }
 
     /// checks if db is open else returns a error
-    fn connection_is_open(&self) -> Result<(), ConnectionClosedError> {
+    fn check_connection(&self) -> Result<(), ConnectionClosedError> {
         if !self.is_open.load(atomic::Ordering::Relaxed) {
             return Err(ConnectionClosedError);
         };
@@ -44,7 +44,7 @@ impl Db {
     }
 
     pub fn set(&mut self, key: String, value: PyObject) -> Result<bool, SetError> {
-        self.connection_is_open()
+        self.check_connection()
             .map_err(|_| SetError::ConnectionClosed)?;
 
         let value_deserialized: Value = Python::with_gil(|py| {
@@ -65,7 +65,7 @@ impl Db {
     }
 
     pub fn remove(&mut self, key: String) -> PyResult<PyObject> {
-        self.connection_is_open()?;
+        self.check_connection()?;
 
         let removed = self.data.remove(&key);
 
@@ -83,7 +83,7 @@ impl Db {
     }
 
     pub fn close(&mut self) -> PyResult<()> {
-        self.connection_is_open()?;
+        self.check_connection()?;
         self.is_open.store(false, atomic::Ordering::Relaxed);
 
         if let Some(tx) = self.logs_tx.take() {
