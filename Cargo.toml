@@ -9,10 +9,14 @@ name = "layer_db"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "^0.17.0", features = ["extension-module"] }
+# pyo3 = { version = "^0.17.0", features = ["extension-module"] }
 serde_json = "1.0"
 serde = { version= "1.0.144" , features=["derive"]}
-log = "0.4.17"
-pyo3-log = "0.7.0"
-signal-hook = "0.3.14"
-pythonize = "0.17.0"
+pythonize = "0.18.0"
+
+[dependencies.pyo3]
+version = "^0.18.0"
+
+[features]
+extension-module = ["pyo3/extension-module"]
+default = ["extension-module"]
