@@ -18,6 +18,35 @@ To install Layer Db, use pip:
 pip install layer-db
 ```
 
+## Develop Locally 
+
+create a virtual env :
+
+```bash
+python -m venv .env 
+source .env/bin/activate
+```
+
+install maturin (Build Tool) :
+
+```
+pip install maturin 
+```
+
+install dependencies 
+
+```
+pip install -r requirements.txt
+```
+
+Develop and install wheels locally (intalled in the venv) :
+
+```
+maturin develop 
+```
+
+should be run everytime code changes .
+
 ## Usage
 
 To use Layer Db, import the layer_db module and call the load() function to load a database file:
