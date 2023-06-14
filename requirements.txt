@@ -1,0 +1,2 @@
+layer_db @ file:///tmp/.tmpDjZFL8/layer_db-0.1.0-cp311-cp311-linux_x86_64.whl
+maturin==1.0.1
